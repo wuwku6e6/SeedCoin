@@ -1,4 +1,4 @@
-# Open setting [here](https://github.com/wuwku6e6/SeedCoin/blob/main/bot/config/config.py)
+# Open setting [here](https://github.com/vanhbakaa/Seed-App-Mine-Seed-BOT-Telegram/blob/main/bot/config/config.py)
 
 | Settings                |                                 Description                                 |
 |-------------------------|:---------------------------------------------------------------------------:|

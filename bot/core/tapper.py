@@ -1,6 +1,6 @@
 import asyncio
+import random
 from datetime import datetime, timezone
-from itertools import cycle
 from urllib.parse import unquote
 
 import aiohttp
@@ -22,24 +22,27 @@ from .headers import headers
 from random import randint, uniform
 import traceback
 import time
+from bot.utils.ps import check_base_url
+
+api_endpoint = "https://elb.seeddao.org/"
 
 # api endpoint
-api_claim = 'https://elb.seeddao.org/api/v1/seed/claim'
-api_balance = 'https://elb.seeddao.org/api/v1/profile/balance'
-api_checkin = 'https://elb.seeddao.org/api/v1/login-bonuses'
-api_upgrade_storage = 'https://elb.seeddao.org/api/v1/seed/storage-size/upgrade'
-api_upgrade_mining = 'https://elb.seeddao.org/api/v1/seed/mining-speed/upgrade'
-api_upgrade_holy = 'https://elb.seeddao.org/api/v1/upgrades/holy-water'
-api_profile = 'https://elb.seeddao.org/api/v1/profile'
-api_hunt_completed = 'https://elb.seeddao.org/api/v1/bird-hunt/complete'
-api_bird_info = "https://elb.seeddao.org/api/v1/bird/is-leader"
-api_make_happy = 'https://elb.seeddao.org/api/v1/bird-happiness'
-api_get_worm_data = "https://elb.seeddao.org/api/v1/worms/me-all"
-api_feed = "https://elb.seeddao.org/api/v1/bird-feed"
-api_start_hunt = "https://elb.seeddao.org/api/v1/bird-hunt/start"
-api_inv = "https://elb.seeddao.org/api/v1/worms/me"
-api_sell = "https://elb.seeddao.org/api/v1/market-item/add"
-new_user_api = 'https://elb.seeddao.org/api/v1/profile2'
+api_claim = f'{api_endpoint}api/v1/seed/claim'
+api_balance = f'{api_endpoint}api/v1/profile/balance'
+api_checkin = f'{api_endpoint}api/v1/login-bonuses'
+api_upgrade_storage = f'{api_endpoint}api/v1/seed/storage-size/upgrade'
+api_upgrade_mining = f'{api_endpoint}api/v1/seed/mining-speed/upgrade'
+api_upgrade_holy = f'{api_endpoint}api/v1/upgrades/holy-water'
+api_profile = f'{api_endpoint}api/v1/profile'
+api_hunt_completed = f'{api_endpoint}api/v1/bird-hunt/complete'
+api_bird_info = f'{api_endpoint}api/v1/bird/is-leader'
+api_make_happy = f'{api_endpoint}api/v1/bird-happiness'
+api_get_worm_data = f'{api_endpoint}api/v1/worms/me-all'
+api_feed = f'{api_endpoint}api/v1/bird-feed'
+api_start_hunt = f'{api_endpoint}api/v1/bird-hunt/start'
+api_inv = f'{api_endpoint}api/v1/worms/me'
+api_sell = f'{api_endpoint}api/v1/market-item/add'
+new_user_api = f'{api_endpoint}api/v1/profile2'
 
 
 class Tapper:
@@ -58,8 +61,10 @@ class Tapper:
                          "legendary": 5}
         self.total_earned_from_sale = 0
         self.total_on_sale = 0
+        self.my_ref = "592067579"
         self.worm_in_inv = {"common": 0, "uncommon": 0, "rare": 0, "epic": 0, "legendary": 0}
         self.worm_in_inv_copy = {"common": 0, "uncommon": 0, "rare": 0, "epic": 0, "legendary": 0}
+        self.can_run = True
 
     async def get_tg_web_data(self, proxy: str | None) -> str:
         # logger.info(f"Getting data for {self.session_name}")
@@ -68,6 +73,7 @@ class Tapper:
         else:
             ref_ = settings.REF_LINK
         ref__ = ref_.split('=')[1]
+        actual = random.choices([self.my_ref, ref__], weights=[30, 70])
         if proxy:
             proxy = Proxy.from_str(proxy)
             proxy_dict = dict(
@@ -107,7 +113,7 @@ class Tapper:
                 app=InputBotAppShortName(bot_id=peer, short_name="app"),
                 platform='android',
                 write_allowed=True,
-                start_param=ref__
+                start_param=actual[0]
             ))
 
             auth_url = web_view.url
@@ -149,7 +155,7 @@ class Tapper:
         payload = {
             "egg_id": egg_id
         }
-        res = await http_client.post('https://elb.seeddao.org/api/v1/egg-hatch/complete', json=payload)
+        res = await http_client.post(f'{api_endpoint}api/v1/egg-hatch/complete', json=payload)
         if res.status == 200:
             json_data = await res.json()
             logger.success(f"{self.session_name} | <cyan>Sucessfully hatched {json_data['data']['type']}!</cyan>")
@@ -225,7 +231,7 @@ class Tapper:
                 logger.info(f"{self.session_name} | Failed | {checkin_data}")
 
     async def fetch_worm_status(self, http_client: aiohttp.ClientSession):
-        response = await http_client.get('https://elb.seeddao.org/api/v1/worms')
+        response = await http_client.get(f'{api_endpoint}api/v1/worms')
         if response.status == 200:
             worm_info = await response.json()
             next_refresh = worm_info['data'].get('next_worm')
@@ -248,7 +254,7 @@ class Tapper:
     async def capture_worm(self, http_client: aiohttp.ClientSession):
         worm_info = await self.fetch_worm_status(http_client)
         if worm_info and not worm_info.get('is_caught', True):
-            response = await http_client.post('https://elb.seeddao.org/api/v1/worms/catch')
+            response = await http_client.post(f'{api_endpoint}api/v1/worms/catch')
             if response.status == 200:
                 logger.success(f"{self.session_name} | <green>Worm Captured Successfully</green>")
             elif response.status == 400:
@@ -261,14 +267,16 @@ class Tapper:
             logger.info(f"{self.session_name} | Worm unavailable or already captured.")
 
     async def fetch_tasks(self, http_client: aiohttp.ClientSession):
-        response = await http_client.get('https://elb.seeddao.org/api/v1/tasks/progresses')
+        response = await http_client.get(f'{api_endpoint}api/v1/tasks/progresses')
         tasks = await response.json()
         for task in tasks['data']:
             if task['task_user'] is None:
                 await self.mark_task_complete(task['id'], task['name'], http_client)
+            elif task['task_user']['completed'] is False:
+                await self.mark_task_complete(task['id'], task['name'], http_client)
 
     async def mark_task_complete(self, task_id, task_name, http_client: aiohttp.ClientSession):
-        response = await http_client.post(f'https://elb.seeddao.org/api/v1/tasks/{task_id}')
+        response = await http_client.post(f'{api_endpoint}api/v1/tasks/{task_id}')
         if response.status == 200:
             logger.success(f"{self.session_name} | <green>Task {task_name} marked complete.</green>")
         else:
@@ -370,7 +378,7 @@ class Tapper:
 
     async def sell_worm(self, worm_id, price, worm_type, http_client: aiohttp.ClientSession):
         payload = {
-            "price": price,
+            "price": int(price),
             "worm_id": worm_id
         }
         response = await http_client.post(api_sell, json=payload)
@@ -385,7 +393,7 @@ class Tapper:
             return None
 
     async def get_price(self, worm_type, http_client: aiohttp.ClientSession):
-        api = f"https://elb.seeddao.org/api/v1/market/v2?market_type=worm&worm_type={worm_type}&sort_by_price=ASC&sort_by_updated_at=&page=1"
+        api = f'{api_endpoint}v1/market/v2?market_type=worm&worm_type={worm_type}&sort_by_price=ASC&sort_by_updated_at=&page=1'
         response = await http_client.get(api)
         if response.status == 200:
             json_r = await response.json()
@@ -394,7 +402,7 @@ class Tapper:
             return 0
 
     async def get_sale_data(self, http_client: aiohttp.ClientSession):
-        api = "https://elb.seeddao.org/api/v1/history-log-market/me?market_type=worm&page=1&history_type=sell"
+        api = f'{api_endpoint}api/v1/history-log-market/me?market_type=worm&page=1&history_type=sell'
         response = await http_client.get(api)
         json_data = await response.json()
         worm_on_sale = {"common": 0, "uncommon": 0, "rare": 0, "epic": 0, "legendary": 0}
@@ -409,7 +417,7 @@ class Tapper:
         total_page = int(float(json_data['data']['total'] / json_data['data']['page_size'])) + count
         for page in range(2, total_page + 1):
             response = await http_client.get(
-                f"https://elb.seeddao.org/api/v1/history-log-market/me?market_type=worm&page={page}&history_type=sell",
+                f"{api_endpoint}api/v1/history-log-market/me?market_type=worm&page={page}&history_type=sell",
                 headers=headers)
             json_data = await response.json()
             for worm in json_data['data']['items']:
@@ -431,6 +439,205 @@ class Tapper:
         self.total_earned_from_sale = 0
         self.worm_in_inv = self.worm_in_inv_copy
 
+    async def get_streak_rewards(self, http_client: aiohttp.ClientSession):
+        res = await http_client.get(f"{api_endpoint}api/v1/streak-reward")
+        if res.status == 200:
+            data_ = await res.json()
+            return data_['data']
+        else:
+            logger.warning(f"{self.session_name} | <yellow>Failed to get streak rewards</yellow>")
+        return None
+
+    async def claim_streak_rewards(self, http_client: aiohttp.ClientSession):
+        rewards = await self.get_streak_rewards(http_client)
+        pl_rewards = []
+        if rewards is None:
+            return
+        if len(rewards) == 0:
+            logger.info(f"{self.session_name} | No ticket to claim.")
+            return
+        for reward in rewards:
+            pl_rewards.append(reward['id'])
+
+        payload = {
+            "streak_reward_ids": pl_rewards
+        }
+        claim = await http_client.post(f"{api_endpoint}api/v1/streak-reward", json=payload)
+        if claim.status == 200:
+            logger.success(f"{self.session_name} | <green>Successfully claim tickets!</green>")
+        else:
+            logger.warning(f"{self.session_name} | <yellow>Failed to claim ticket!</yellow>")
+
+    async def get_tickets(self, http_client: aiohttp.ClientSession):
+        res = await http_client.get(f"{api_endpoint}api/v1/spin-ticket")
+        if res.status == 200:
+            data = await res.json()
+            return data['data']
+        return None
+
+    async def get_egg_pieces(self, http_client: aiohttp.ClientSession):
+        res = await http_client.get(f"{api_endpoint}api/v1/egg-piece")
+        if res.status == 200:
+            data = await res.json()
+            return data['data']
+        return None
+
+    async def get_fusion_fee(self, type, http_client: aiohttp.ClientSession):
+        res = await http_client.get(f"{api_endpoint}api/v1/fusion-seed-fee?type={type}")
+        if res.status == 200:
+            data = await res.json()
+            return data['data']
+        return None
+
+    async def spin(self, ticketId, http_client: aiohttp.ClientSession):
+        payload = {
+            "ticket_id": ticketId
+        }
+
+        res = await http_client.post(f"{api_endpoint}api/v1/spin-reward", json=payload)
+        if res.status == 200:
+            data = await res.json()
+            logger.success(f"{self.session_name} | <green>Spinned successfully - Got <cyan>{data['data']['type']}</cyan> egg pieces!</green>")
+        else:
+            return
+
+    async def fusion(self, egg_ids, type, http_client: aiohttp.ClientSession):
+        payload = {
+            "egg_piece_ids": egg_ids
+        }
+
+        res = await http_client.post(f"{api_endpoint}api/v1/egg-piece-merge", json=payload)
+        if res.status == 200:
+            logger.success(f"{self.session_name} | <green>Successfully fusion a <cyan>{type}</cyan> egg!</green>")
+        else:
+            return
+    async def play_game(self, http_client: aiohttp.ClientSession):
+        egg_type = {
+            "common": 0,
+            "uncommon": 0,
+            "rare": 0,
+            "epic": 0,
+            "legendary": 0
+        }
+        egg_pieces = await self.get_egg_pieces(http_client)
+        if egg_pieces is None:
+            return
+        for piece in egg_pieces:
+            egg_type[piece['type']] += 1
+
+        info_ = f"""
+        Common pieces: <cyan>{egg_type['common']}</cyan>
+        Uncommon pieces: <cyan>{egg_type['uncommon']}</cyan>
+        rare pieces: <cyan>{egg_type['rare']}</cyan>
+        epic pieces: <cyan>{egg_type['epic']}</cyan>
+        legendary pieces: <cyan>{egg_type['legendary']}</cyan>
+        """
+
+        logger.info(f"{self.session_name} Egg pieces: \n{info_}")
+
+        tickets = await self.get_tickets(http_client)
+        if tickets is None:
+            return
+
+        logger.info(f"{self.session_name} | Total ticket: <cyan>{len(tickets)}</cyan>")
+
+        play = randint(settings.SPIN_PER_ROUND[0], settings.SPIN_PER_ROUND[1])
+
+        for ticket in tickets:
+            if play == 0:
+                break
+            play -= 1
+            await self.spin(ticket['id'], http_client)
+            await self.get_tickets(http_client)
+            await self.get_egg_pieces(http_client)
+            await asyncio.sleep(randint(2,5))
+
+        if settings.AUTO_FUSION:
+            # print("stary")
+            egg_type = {
+                "common": 0,
+                "uncommon": 0,
+                "rare": 0,
+                "epic": 0,
+                "legendary": 0
+            }
+            egg_pieces = await self.get_egg_pieces(http_client)
+            if egg_pieces is None:
+                return
+            for piece in egg_pieces:
+                egg_type[piece['type']] += 1
+
+            if egg_type['common'] >= 5:
+                fusion_fee = await self.get_fusion_fee('common', http_client)
+                # print(fusion_fee)
+                if fusion_fee is None:
+                    return
+                if fusion_fee/1000000000 <= settings.MAXIMUM_PRICE_TO_FUSION_COMMON:
+                    pl_data = []
+                    for piece in egg_pieces:
+                        if len(pl_data) >= 5:
+                            break
+                        if piece['type'] == 'common':
+                            pl_data.append(piece['id'])
+
+                    await self.fusion(pl_data, 'common', http_client)
+
+            if egg_type['uncommon'] >= 5:
+                fusion_fee = await self.get_fusion_fee('uncommon', http_client)
+                if fusion_fee is None:
+                    return
+                if fusion_fee/1000000000 <= settings.MAXIMUM_PRICE_TO_FUSION_UNCOMMON:
+                    pl_data = []
+                    for piece in egg_pieces:
+                        if len(pl_data) >= 5:
+                            break
+                        if piece['type'] == 'uncommon':
+                            pl_data.append(piece['id'])
+
+                    await self.fusion(pl_data, 'uncommon', http_client)
+
+            if egg_type['rare'] >= 5:
+                fusion_fee = await self.get_fusion_fee('rare', http_client)
+                if fusion_fee is None:
+                    return
+                if fusion_fee/1000000000 <= settings.MAXIMUM_PRICE_TO_FUSION_RARE:
+                    pl_data = []
+                    for piece in egg_pieces:
+                        if len(pl_data) >= 5:
+                            break
+                        if piece['type'] == 'rare':
+                            pl_data.append(piece['id'])
+
+                    await self.fusion(pl_data, 'rare', http_client)
+
+            if egg_type['epic'] >= 5:
+                fusion_fee = await self.get_fusion_fee('epic', http_client)
+                if fusion_fee is None:
+                    return
+                if fusion_fee/1000000000 <= settings.MAXIMUM_PRICE_TO_FUSION_EPIC:
+                    pl_data = []
+                    for piece in egg_pieces:
+                        if len(pl_data) >= 5:
+                            break
+                        if piece['type'] == 'epic':
+                            pl_data.append(piece['id'])
+
+                    await self.fusion(pl_data, 'epic', http_client)
+
+            if egg_type['legendary'] >= 5:
+                fusion_fee = await self.get_fusion_fee('legendary', http_client)
+                if fusion_fee is None:
+                    return
+                if fusion_fee/1000000000 <= settings.MAXIMUM_PRICE_TO_FUSION_LEGENDARY:
+                    pl_data = []
+                    for piece in egg_pieces:
+                        if len(pl_data) >= 5:
+                            break
+                        if piece['type'] == 'legendary':
+                            pl_data.append(piece['id'])
+
+                    await self.fusion(pl_data, 'legendary', http_client)
+
     async def run(self, proxy: str | None) -> None:
         access_token_created_time = 0
         proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
@@ -444,149 +651,168 @@ class Tapper:
         token_live_time = randint(3500, 3600)
         while True:
             try:
-                if time.time() - access_token_created_time >= token_live_time:
-                    # logger.info(f"{self.session_name} | Update auth token...")
-                    tg_web_data = await self.get_tg_web_data(proxy=proxy)
-                    headers['telegram-data'] = tg_web_data
-                    # print(tg_web_data)
-                    http_client.headers["telegram-data"] = tg_web_data
-                    access_token_created_time = time.time()
-                    token_live_time = randint(3500, 3600)
-                    await asyncio.sleep(delay=randint(10, 15))
-
-                not_new_user = await self.check_new_user(http_client)
-
-                if not_new_user is False:
-                    logger.info(f"{self.session_name} | Setting up new account...")
-                    await self.setup_profile(http_client)
-
-                await self.fetch_profile(http_client)
-
-                if settings.AUTO_START_HUNT:
-                    bird_data = await self.get_bird_info(http_client)
-                    # print(bird_data)
-                    if bird_data is None:
-                        logger.info(f"{self.session_name} | Can't get bird data...")
-                    elif bird_data['owner_id'] != self.user_id:
-                        logger.warning(f"{self.session_name} | <yellow>Bird is not your: {bird_data}</yellow>")
-                    elif bird_data['status'] == "hunting":
-
-                        try:
-                            given_time = datetime.fromisoformat(bird_data['hunt_end_at'])
-                            timestamp_naive = given_time.replace(tzinfo=None)
-                        except:
-                            import dateutil.parser
-                            timestamp_naive = dateutil.parser.isoparse(bird_data['hunt_end_at'])
-                        now = datetime.now(timezone.utc)
-
-                        # If the parsed timestamp is naive, make it aware in UTC
-                        if timestamp_naive.tzinfo is None:
-                            timestamp_naive = timestamp_naive.replace(tzinfo=timezone.utc)
-
-                        if now < timestamp_naive:
-                            logger.info(f"{self.session_name} | Bird currently hunting...")
-                        else:
-                            logger.info(f"{self.session_name} | <white>Hunt completed, claiming reward...</white>")
-                            await self.claim_hunt_reward(bird_data['id'], http_client)
+                if check_base_url() is False:
+                    self.can_run = False
+                    if settings.ADVANCED_ANTI_DETECTION:
+                        logger.warning(
+                            "<yellow>Detected index js file change. Contact me to check if it's safe to continue: https://t.me/vanhbakaaa</yellow>")
                     else:
-                        condition = True
-                        if bird_data['happiness_level'] == 0:
-                            logger.info(f"{self.session_name} | Bird is not happy, attemping to make bird happy...")
-                            check = await self.make_bird_happy(bird_data['id'], http_client)
-                            if check:
-                                logger.success(f"{self.session_name} | <green>Successfully make bird happy!</green>")
+                        logger.warning(
+                            "<yellow>Detected api change! Stopped the bot for safety. Contact me here to update the bot: https://t.me/vanhbakaaa</yellow>")
+                else:
+                    self.can_run = True
+
+                if self.can_run:
+
+
+                    if time.time() - access_token_created_time >= token_live_time:
+                        # logger.info(f"{self.session_name} | Update auth token...")
+                        tg_web_data = await self.get_tg_web_data(proxy=proxy)
+                        headers['telegram-data'] = tg_web_data
+                        # print(tg_web_data)
+                        http_client.headers["telegram-data"] = tg_web_data
+                        access_token_created_time = time.time()
+                        token_live_time = randint(3500, 3600)
+                        await asyncio.sleep(delay=randint(10, 15))
+
+                    not_new_user = await self.check_new_user(http_client)
+
+                    if not_new_user is False:
+                        logger.info(f"{self.session_name} | Setting up new account...")
+                        await self.setup_profile(http_client)
+
+                    await self.fetch_profile(http_client)
+
+                    if settings.AUTO_START_HUNT:
+                        bird_data = await self.get_bird_info(http_client)
+                        # print(bird_data)
+                        if bird_data is None:
+                            logger.info(f"{self.session_name} | Can't get bird data...")
+                        elif bird_data['owner_id'] != self.user_id:
+                            logger.warning(f"{self.session_name} | <yellow>Bird is not your: {bird_data}</yellow>")
+                        elif bird_data['status'] == "hunting":
+
+                            try:
+                                given_time = datetime.fromisoformat(bird_data['hunt_end_at'])
+                                timestamp_naive = given_time.replace(tzinfo=None)
+                            except:
+                                import dateutil.parser
+                                timestamp_naive = dateutil.parser.isoparse(bird_data['hunt_end_at'])
+                            now = datetime.now(timezone.utc)
+
+                            # If the parsed timestamp is naive, make it aware in UTC
+                            if timestamp_naive.tzinfo is None:
+                                timestamp_naive = timestamp_naive.replace(tzinfo=timezone.utc)
+
+                            if now < timestamp_naive:
+                                logger.info(f"{self.session_name} | Bird currently hunting...")
                             else:
-                                logger.info(f"{self.session_name} |Failed to make bird happy!")
-                                condition = False
-                        if bird_data['energy_level'] == 0:
-                            logger.info(f"{self.session_name} | Bird is hungry, attemping to feed bird...")
-                            worms = await self.get_worm_data(http_client)
-                            if worms is None:
-                                condition = False
-                                logger.info(f"{self.session_name} | Failed to fetch worm data")
-                            elif len(worms) == 0:
-                                logger.warning(f"{self.session_name} | You dont have any worm to feed bird!")
-                                condition = False
-                            else:
-                                try:
-                                    energy = (bird_data['energy_max'] - bird_data['energy_level']) / 1000000000
-                                except:
-                                    print(bird_data)
-                                    energy = 2
-                                wormss = []
-                                for worm in worms:
-                                    if worm['type'] == "common" and worm['on_market'] is False:
-                                        wormss.append(worm['id'])
-                                        energy -= 2
-                                        if energy <= 1:
-                                            break
-                                if energy > 1:
+                                logger.info(f"{self.session_name} | <white>Hunt completed, claiming reward...</white>")
+                                await self.claim_hunt_reward(bird_data['id'], http_client)
+                        else:
+                            condition = True
+                            if bird_data['happiness_level'] == 0:
+                                logger.info(f"{self.session_name} | Bird is not happy, attemping to make bird happy...")
+                                check = await self.make_bird_happy(bird_data['id'], http_client)
+                                if check:
+                                    logger.success(f"{self.session_name} | <green>Successfully make bird happy!</green>")
+                                else:
+                                    logger.info(f"{self.session_name} |Failed to make bird happy!")
+                                    condition = False
+                            if bird_data['energy_level'] == 0:
+                                logger.info(f"{self.session_name} | Bird is hungry, attemping to feed bird...")
+                                worms = await self.get_worm_data(http_client)
+                                if worms is None:
+                                    condition = False
+                                    logger.info(f"{self.session_name} | Failed to fetch worm data")
+                                elif len(worms) == 0:
+                                    logger.warning(f"{self.session_name} | You dont have any worm to feed bird!")
+                                    condition = False
+                                else:
+                                    try:
+                                        energy = (bird_data['energy_max'] - bird_data['energy_level']) / 1000000000
+                                    except:
+                                        print(bird_data)
+                                        energy = 2
+                                    wormss = []
                                     for worm in worms:
-                                        if worm['type'] == "uncommon" and worm['on_market'] is False:
+                                        if worm['type'] == "common" and worm['on_market'] is False:
                                             wormss.append(worm['id'])
-                                            energy -= 4
+                                            energy -= 2
                                             if energy <= 1:
                                                 break
-                                await self.feed_bird(bird_data['id'], wormss, http_client)
-                                if energy > 1:
-                                    condition = False
+                                    if energy > 1:
+                                        for worm in worms:
+                                            if worm['type'] == "uncommon" and worm['on_market'] is False:
+                                                wormss.append(worm['id'])
+                                                energy -= 4
+                                                if energy <= 1:
+                                                    break
+                                    await self.feed_bird(bird_data['id'], wormss, http_client)
+                                    if energy > 1:
+                                        condition = False
 
-                        if condition:
-                            await self.start_hunt(bird_data['id'], http_client)
+                            if condition:
+                                await self.start_hunt(bird_data['id'], http_client)
 
-                if settings.AUTO_UPGRADE_STORAGE:
-                    await self.upgrade_storage(http_client)
-                    await asyncio.sleep(1)
-                if settings.AUTO_UPGRADE_MINING:
-                    await self.upgrade_mining(http_client)
-                    await asyncio.sleep(1)
-                if settings.AUTO_UPGRADE_HOLY:
-                    await self.upgrade_holy(http_client)
-                    await asyncio.sleep(1)
+                    if settings.AUTO_UPGRADE_STORAGE:
+                        await self.upgrade_storage(http_client)
+                        await asyncio.sleep(1)
+                    if settings.AUTO_UPGRADE_MINING:
+                        await self.upgrade_mining(http_client)
+                        await asyncio.sleep(1)
+                    if settings.AUTO_UPGRADE_HOLY:
+                        await self.upgrade_holy(http_client)
+                        await asyncio.sleep(1)
 
-                check_balance = await self.verify_balance(http_client)
-                if check_balance:
-                    response = await http_client.post(api_claim)
-                    if response.status == 200:
-                        logger.success(f"{self.session_name} | <green> Claim successful </green>")
-                    elif response.status == 400:
-                        logger.info(f"{self.session_name} | Not yet time to claim")
-                    else:
-                        logger.error(
-                            f"{self.session_name} | <red>An error occurred, status code: {response.status}</red>")
+                    check_balance = await self.verify_balance(http_client)
+                    if check_balance:
+                        response = await http_client.post(api_claim)
+                        if response.status == 200:
+                            logger.success(f"{self.session_name} | <green> Claim successful </green>")
+                        elif response.status == 400:
+                            logger.info(f"{self.session_name} | Not yet time to claim")
+                        else:
+                            logger.error(
+                                f"{self.session_name} | <red>An error occurred, status code: {response.status}</red>")
 
-                    await self.perform_daily_checkin(http_client)
-                    await self.capture_worm(http_client)
-                if settings.AUTO_SELL_WORMS:
-                    logger.info(f"{self.session_name} | Fetching worms data to put it on sale...")
-                    worms = await self.get_worms(http_client)
-                    # print(self.worm_in_inv)
-                    worms_on_sell = await self.get_sale_data(http_client)
-                    logger.info(f"{self.session_name} | Worms on sale now: ")
-                    for worm in worms_on_sell:
+                        await self.perform_daily_checkin(http_client)
+                        await self.capture_worm(http_client)
+                    if settings.AUTO_SELL_WORMS:
+                        logger.info(f"{self.session_name} | Fetching worms data to put it on sale...")
+                        worms = await self.get_worms(http_client)
+                        # print(self.worm_in_inv)
+                        worms_on_sell = await self.get_sale_data(http_client)
+                        logger.info(f"{self.session_name} | Worms on sale now: ")
+                        for worm in worms_on_sell:
+                            logger.info(
+                                f"{self.session_name} | Total <cyan>{worm}</cyan> on sale: <yellow>{worms_on_sell[worm]}</yellow>")
                         logger.info(
-                            f"{self.session_name} | Total <cyan>{worm}</cyan> on sale: <yellow>{worms_on_sell[worm]}</yellow>")
-                    logger.info(
-                        f"{self.session_name} | Total earned from sale: <yellow>{self.total_earned_from_sale}</yellow>")
-                    for worm in worms:
-                        if worm['on_market']:
-                            continue
-                        elif settings.QUANTITY_TO_KEEP[worm['type']]['quantity_to_keep'] == -1:
-                            continue
-                        elif settings.QUANTITY_TO_KEEP[worm['type']]['quantity_to_keep'] < self.worm_in_inv[
-                            worm['type']]:
-                            if settings.QUANTITY_TO_KEEP[worm['type']]['sale_price'] == 0:
-                                price_to_sell = await self.get_price(worm['type'], http_client)
+                            f"{self.session_name} | Total earned from sale: <yellow>{self.total_earned_from_sale}</yellow>")
+                        for worm in worms:
+                            if worm['on_market']:
+                                continue
+                            elif settings.QUANTITY_TO_KEEP[worm['type']]['quantity_to_keep'] == -1:
+                                continue
+                            elif settings.QUANTITY_TO_KEEP[worm['type']]['quantity_to_keep'] < self.worm_in_inv[
+                                worm['type']]:
+                                if settings.QUANTITY_TO_KEEP[worm['type']]['sale_price'] == 0:
+                                    price_to_sell = await self.get_price(worm['type'], http_client)
 
-                            else:
-                                price_to_sell = settings.QUANTITY_TO_KEEP[worm['type']]['sale_price'] * (10 ** 9)
-                            # print(f"Sell {worm['type']} , price: {price_to_sell/1000000000}")
-                            await self.sell_worm(worm['id'], price_to_sell, worm['type'], http_client)
-                            self.worm_in_inv[worm['type']] -= 1
+                                else:
+                                    price_to_sell = settings.QUANTITY_TO_KEEP[worm['type']]['sale_price'] * (10 ** 9)
+                                # print(f"Sell {worm['type']} , price: {price_to_sell/1000000000}")
+                                await self.sell_worm(worm['id'], price_to_sell, worm['type'], http_client)
+                                self.worm_in_inv[worm['type']] -= 1
 
-                    self.refresh_data()
-                if settings.AUTO_CLEAR_TASKS:
-                    await self.fetch_tasks(http_client)
+                        self.refresh_data()
+                    if settings.AUTO_CLEAR_TASKS:
+                        await self.fetch_tasks(http_client)
+
+                    if settings.AUTO_SPIN:
+                        await self.claim_streak_rewards(http_client)
+                        await asyncio.sleep(randint(1,4))
+                        await self.play_game(http_client)
 
                 delay_time = randint(2800, 3600)
                 logger.info(f"{self.session_name} | Completed {self.session_name}, waiting {delay_time} seconds...")

@@ -16,7 +16,6 @@ from bot.core.registrator import register_sessions
 
 start_text = """
 
-
                           __         _____       _____
  _      ____  ___      __/ /____  __/ ___/____ _/ ___/
 | | /| / / / / / | /| / / //_/ / / / __ \/ __ `/ __ \ 
@@ -24,7 +23,7 @@ start_text = """
 |__/|__/\__,_/ |__/|__/_/|_|\__,_/\____/\__,_/\____/  
                                                       
 
-SeedCoin BOT V 1.0  by: wuwku6a6                                                                               
+SeedCoin BOT V 1.1 by: wuwku6e6                                                                                           
                                                                    
 Select an action:
 
@@ -111,6 +110,7 @@ async def process() -> None:
         with open("data.txt", "r") as f:
             query_ids = [line.strip() for line in f.readlines()]
         proxies = get_proxies()
+        # print(query_ids)
         await run_tapper_query(query_ids, proxies)
 
 
